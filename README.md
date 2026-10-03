@@ -1,0 +1,3 @@
+python new_feature_selection_v20.py --ranking consensus --corr-agg quantile --corr-q 0.25 --ens-m 1 --stall-metric none --no-lookahead --tol 0.005 --genuine-scope enrolment+testing --min-features 10 --select-best auc --out features\v3_v2\selected_V20_BEST_AUC_CEILING_PROBE.json --curve-out reports\v20_auc_curve.csv
+ python new_feature_selection_v20.py --sweep-eval --curve features\v3_v2\selected_V20_BEST_AUC_CEILING_PROBE.json --features features\v3_v2 --sweep-out reports\v20_deployed_sweep.csv
+ python new_train_session_2.py --features features\v3_v2 --feature-list features\v3_v2\selected_V20_N46_TAR95_CEILING_PROBE.json --models models_ceiling_v20_n46 --plot-dir plots_ceiling_v20_n46 --calibrate-frr 0.05 --calibrate-method temporal
