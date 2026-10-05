@@ -1,0 +1,430 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+prescreen_v3_device.py - device-decoupled ranking for Phase 1.
+
+THE PROBLEM THIS SOLVES
+=======================
+The training-data Fisher score cannot distinguish a person from their handset,
+because in this collection every enrolled user appears on exactly ONE device:
+
+    Parthish  81607f5bc2bc6381      ram     c2e1d18319155385
+    surya     a48aaba1b9ca044f      reddy   6ef462b9d47924f4      ... etc
+
+Person and device are perfectly aliased in the enrolment set. A feature that
+separates handsets scores exactly as well as a feature that separates people,
+and the wrapper then happily selects it. It will look excellent in validation
+and do nothing at test time, because at test time the impostor is holding the
+OWNER'S phone - the device signature is identical on both sides and only the
+behaviour differs.
+
+MEASURED ON THIS DATASET
+------------------------
+The attack sessions break the aliasing: the same attacker appears on several
+different owners' phones. Decomposing attacker keystroke dwell over 105
+(person, host-phone) cells:
+
+    PERSON effect  74.1%
+    DEVICE effect  24.8%      <- pure confound
+    residual        1.0%
+
+and the host ordering is consistent across nearly every attacker (rohity's
+handset reads ~94 ms, Parthish's ~76 ms, for the same people). Of the 50
+features the ceiling probe selected, 17 have MORE variance explained by host
+device than by person, topped by:
+
+    wf_angle_p50           device 88.7%   person 12.9%
+    gyro_x_mfcc_0          device 74.0%   person 10.1%
+    acc_z_mfcc_1           device 73.9%   person 13.7%
+
+Those are device sensors wearing a behaviour costume. This module finds and
+demotes them.
+
+WHAT THIS MODULE ADDS
+=====================
+Two rankings the training-only Fisher cannot produce, plus a consensus:
+
+1. CROSS-DEVICE FISHER (`crossdev_fisher`)
+   Ranks features by how well they separate PEOPLE when the same people are
+   observed on MULTIPLE handsets. Built from pooled ATTACK sessions across all
+   owners - the only place in the data where a person appears on more than one
+   device. Class = operator_id, and only attackers seen on >= MIN_HOSTS
+   different phones are used, so the between-class contrast cannot be device.
+   The classes are BALANCED (equal sessions per attacker, sampled
+   deterministically) so a prolific attacker cannot dominate.
+
+2. DEVICE-INVARIANCE PENALTY (`device_variance_share`)
+   For each feature, the share of variance explained by HOST DEVICE versus by
+   PERSON on those same pooled attack sessions. A feature with device share
+   above DEVICE_VETO is vetoed outright regardless of how good its Fisher is;
+   the rest are down-weighted smoothly.
+
+3. CONSENSUS RANK (`consensus_ranking`)
+   Combines training Fisher (which knows about within-user stability, and is
+   the only signal available for enrolment-time behaviour) with cross-device
+   Fisher (which knows about person-vs-device) using rank fusion, then applies
+   the device veto. Rank fusion rather than score averaging because the two
+   Fishers are on different scales and different sample sizes; ranks are
+   comparable, raw values are not.
+
+HONESTY NOTE - READ THIS
+========================
+Cross-device Fisher is computed from TEST-SET impostor rows. That is a real
+exposure of test data to the selection process, of exactly the kind the v4
+design was built to avoid. Two things make it defensible, and one makes it
+dangerous:
+
+  defensible: it uses only IMPOSTOR rows, never genuine ones, so the owner's
+              own test sessions stay untouched; and the contrast it measures
+              (attacker A vs attacker B) is not the contrast the system is
+              evaluated on (owner vs attacker).
+
+  defensible: it can be restricted to the SELECTION-FOLD attackers only, via
+              `restrict_to`, which keeps the reserved attackers unseen and
+              preserves an honest FAR. Pass the selection_attackers map from
+              the v4 fold split and the guarantee is the same as v4's.
+
+  dangerous:  if you pass every attacker, the reported FAR afterwards is
+              contaminated, exactly as in the ceiling probe. The functions here
+              never decide that for you - `restrict_to=None` means "use
+              everyone", and the caller must own that choice.
+
+USAGE
+-----
+    from prescreen_v3_device import consensus_ranking
+    cand, fisher, viability, diag = consensus_ranking(
+        frames, cols, feature_dir, keep_n=400,
+        restrict_to=selection_attackers)   # None = use all (contaminating)
+"""
+
+from __future__ import annotations
+
+import os
+from collections import defaultdict
+
+import numpy as np
+import pandas as pd
+
+from prescreen_v2 import prescreen_v2, viability_mask, robust_fisher
+
+
+# ============================== CONFIG ==============================
+
+# An attacker must appear on at least this many DIFFERENT host phones before
+# their sessions can contribute to the cross-device contrast. Below 3 the
+# person effect and the device effect cannot be told apart for that individual,
+# which is the whole problem we are trying to escape.
+MIN_HOSTS = 3
+
+# Minimum sessions per attacker after balancing. An attacker with fewer is
+# dropped rather than up-weighted; duplicating rows would fake precision.
+MIN_SESSIONS_PER_ATTACKER = 3
+
+# A feature whose variance is more than this share device-driven is VETOED. At
+# 0.50 a feature must be at least as much about the person as about the
+# handset. This is deliberately a hard gate, not a penalty: above this level the
+# feature is measuring the phone, and a smooth down-weight would still let a
+# large Fisher drag it back into the set.
+DEVICE_VETO = 0.50
+
+# Weight on cross-device Fisher in the consensus. 0 reproduces the v4 ranking,
+# 1 ignores training stability entirely. 0.5 is an equal vote: training Fisher
+# is the only evidence about within-user stability over time, and cross-device
+# Fisher is the only evidence about device independence. Both matter.
+W_CROSSDEV = 0.5
+
+RANDOM_SEED = 42
+
+
+# ============================== POOLED ATTACK MATRIX ==============================
+
+def load_pooled_attacks(feature_dir, users, cols, restrict_to=None,
+                        min_hosts=MIN_HOSTS, balance=True, verbose=True):
+    """
+    Every attack session from every owner's testing CSV, pooled and labelled by
+    (person, host device).
+
+    This is the only view of the data in which one person appears on several
+    handsets, which is what makes the person effect separable from the device
+    effect. Genuine rows are never read.
+
+    restrict_to  {owner: [attacker, ...]} - when given, only these attacker/owner
+                 pairings are pooled. Pass the selection-fold map to keep the
+                 reserved attackers unseen; pass None to use everyone and accept
+                 that the later FAR is contaminated.
+
+    Returns (DataFrame of features, person Series, host Series).
+    """
+    frames = []
+    for u in users:
+        p = os.path.join(feature_dir, f'{u}_testing_sessions.csv')
+        if not os.path.exists(p):
+            continue
+        df = pd.read_csv(p, low_memory=False)
+        lc = next((c for c in ('test_type', 'session_label', 'label')
+                   if c in df.columns), None)
+        if lc is None or 'operator_id' not in df.columns:
+            continue
+        lab = df[lc].astype(str).str.strip().str.lower()
+        imp = df[lab.isin(('impostor', 'imposter', 'attack', 'attacker'))].copy()
+        if imp.empty:
+            continue
+        if restrict_to is not None:
+            allowed = set(map(str, restrict_to.get(u, [])))
+            imp = imp[imp['operator_id'].astype(str).isin(allowed)]
+            if imp.empty:
+                continue
+        imp['__person__'] = imp['operator_id'].astype(str)
+        imp['__host__'] = u
+        frames.append(imp)
+
+    if not frames:
+        return pd.DataFrame(), pd.Series(dtype=object), pd.Series(dtype=object)
+
+    A = pd.concat(frames, ignore_index=True)
+
+    # Keep only people observed on enough different handsets. This is the gate
+    # that makes the contrast device-free; without it a person seen on one phone
+    # reintroduces exactly the aliasing we are removing.
+    hosts_per = A.groupby('__person__')['__host__'].nunique()
+    good = hosts_per[hosts_per >= min_hosts].index
+    A = A[A['__person__'].isin(good)]
+    if A.empty:
+        return pd.DataFrame(), pd.Series(dtype=object), pd.Series(dtype=object)
+
+    # Balance: cap sessions per person, sampled deterministically. Unbalanced
+    # classes would let a prolific attacker's handset mix masquerade as a person
+    # effect, which is the same confound one level up.
+    #
+    # The cap is the MEDIAN, not the minimum. Truncating everyone to the
+    # smallest class throws away most of the data as the cohort grows - on the
+    # 8-user set the minimum is 15 and that discards 250 of 490 rows, and one
+    # new attacker with 3 sessions would collapse the whole matrix to 3 per
+    # person. The median caps the prolific attackers (which is what balancing
+    # is actually for) while letting the smaller ones contribute everything they
+    # have. Classes are then unequal but bounded, so no single person can
+    # dominate; the residual imbalance is handled by using per-person MEDIAN
+    # within-variance in crossdev_fisher rather than a pooled sum.
+    if balance:
+        n = A.groupby('__person__').size()
+        n = n[n >= MIN_SESSIONS_PER_ATTACKER]
+        A = A[A['__person__'].isin(n.index)]
+        if A.empty:
+            return pd.DataFrame(), pd.Series(dtype=object), pd.Series(dtype=object)
+        k = int(max(np.median(n.values), MIN_SESSIONS_PER_ATTACKER))
+        rng = np.random.default_rng(RANDOM_SEED)
+        parts = []
+        for person, g in A.groupby('__person__', sort=True):
+            idx = rng.choice(len(g), k, replace=False) if len(g) > k \
+                else np.arange(len(g))
+            parts.append(g.iloc[np.sort(idx)])
+        A = pd.concat(parts, ignore_index=True)
+
+    person, host = A['__person__'].copy(), A['__host__'].copy()
+    keep = [c for c in cols if c in A.columns]
+    X = A[keep].apply(pd.to_numeric, errors='coerce')
+
+    if verbose:
+        print(f'  [cross-device] {len(A)} attack session(s) | '
+              f'{person.nunique()} person(s) on >= {min_hosts} host(s) | '
+              f'{host.nunique()} host device(s)')
+        if balance:
+            print(f"  [cross-device] balanced: cap {k} session(s) per person "
+                  f"(median-based; smaller classes keep all they have)")
+        if restrict_to is not None:
+            print('  [cross-device] restricted to SELECTION-FOLD attackers - '
+                  'reserved attackers stay unseen')
+        else:
+            print('  [cross-device] ! using ALL attackers - any FAR reported '
+                  'later is contaminated')
+    return X, person, host
+
+
+# ============================== THE TWO NEW SIGNALS ==============================
+
+def _one_way_share(z, groups):
+    """Share of total variance explained by a grouping. z is standardised."""
+    ok = z.notna()
+    z, groups = z[ok], groups[ok]
+    if len(z) < 3:
+        return np.nan
+    tot = float(((z - z.mean()) ** 2).sum())
+    if tot <= 0:
+        return np.nan
+    gm = z.groupby(groups).agg(['mean', 'size'])
+    ss = float((gm['size'] * (gm['mean'] - z.mean()) ** 2).sum())
+    return ss / tot
+
+
+def device_variance_share(X, person, host, verbose=True):
+    """
+    Per feature: (device share, person share) of total variance.
+
+    Both are computed on the same pooled attack rows, so they are directly
+    comparable. A feature with device > person is measuring the handset.
+    """
+    dev, per = {}, {}
+    for c in X.columns:
+        v = X[c]
+        sd = v.std(ddof=0)
+        if not np.isfinite(sd) or sd < 1e-12:
+            continue
+        z = (v - v.mean()) / sd
+        d = _one_way_share(z, host)
+        p = _one_way_share(z, person)
+        if np.isfinite(d) and np.isfinite(p):
+            dev[c], per[c] = d, p
+    dev, per = pd.Series(dev), pd.Series(per)
+    if verbose and len(dev):
+        n_bad = int((dev > per).sum())
+        print(f'  [device split] {len(dev)} feature(s) measurable | '
+              f'median device {dev.median():.3f} person {per.median():.3f}')
+        print(f'  [device split] {n_bad} feature(s) are MORE device- than '
+              f'person-driven')
+        print(f'  [device split] {int((dev > DEVICE_VETO).sum())} exceed the '
+              f'veto threshold {DEVICE_VETO}')
+    return dev, per
+
+
+def crossdev_fisher(X, person, host, verbose=True):
+    """
+    Fisher ratio with class = PERSON, across multiple host devices.
+
+    between = spread of per-person means
+    within  = mean per-person variance (pooled over that person's several hosts)
+
+    Because each person's rows span several handsets, their within-class
+    variance now INCLUDES the device variation. A device-driven feature
+    therefore gets a large within term and a poor score - which is precisely the
+    penalty the training-only Fisher cannot apply.
+    """
+    out = {}
+    for c in X.columns:
+        v = X[c]
+        sd = v.std(ddof=0)
+        if not np.isfinite(sd) or sd < 1e-12:
+            continue
+        z = (v - v.mean()) / sd
+        g = z.groupby(person)
+        mu = g.mean()
+        wi = g.var(ddof=0)
+        if mu.notna().sum() < 2:
+            continue
+        within = float(np.nanmedian(wi.values))
+        between = float(np.nanvar(mu.values, ddof=0))
+        if not np.isfinite(within) or within <= 1e-9:
+            continue
+        out[c] = between / within
+    F = pd.Series(out).sort_values(ascending=False)
+    if verbose and len(F):
+        print(f'  [cross-device fisher] {len(F)} feature(s) scored | '
+              f'max {F.iloc[0]:.3f} at {F.index[0]} | median {F.median():.4f}')
+    return F
+
+
+# ============================== CONSENSUS ==============================
+
+def consensus_ranking(frames, cols, feature_dir, keep_n=400,
+                      restrict_to=None, w_crossdev=W_CROSSDEV,
+                      device_veto=DEVICE_VETO, min_hosts=MIN_HOSTS,
+                      verbose=True):
+    """
+    Rank-fuse the training Fisher with the cross-device Fisher, then veto
+    device-driven features.
+
+    Returns (candidates, fused_score, viability_mask, diagnostics_frame).
+
+    The fusion is on RANKS, not raw scores: the two Fishers come from different
+    sample sizes and different class structures, so their scales are not
+    comparable, while their orderings are.
+    """
+    users = sorted(frames)
+
+    if verbose:
+        print('  [consensus] step 1/3  training-data ranking (v2 pre-screen)')
+    mask, _P, _R, _V = viability_mask(frames, cols, verbose=False)
+    viable_any = [c for c in cols if bool(mask[c].any())]
+    F_train, _health = robust_fisher(frames, viable_any, mask=mask, verbose=False)
+    F_train = F_train.dropna()
+    if verbose:
+        print(f'    {len(F_train)} feature(s) ranked on enrolment data')
+
+    if verbose:
+        print('  [consensus] step 2/3  cross-device ranking (pooled attacks)')
+    X, person, host = load_pooled_attacks(
+        feature_dir, users, viable_any, restrict_to=restrict_to,
+        min_hosts=min_hosts, verbose=verbose)
+
+    if X.empty or person.nunique() < 2:
+        if verbose:
+            print('    ! no usable cross-device data - falling back to the '
+                  'training-only ranking. The device confound is NOT corrected.')
+        cand = list(F_train.sort_values(ascending=False).index[:keep_n])
+        diag = pd.DataFrame({'fisher_train': F_train})
+        return cand, F_train, mask, diag
+
+    F_cross = crossdev_fisher(X, person, host, verbose=verbose)
+    dev_sh, per_sh = device_variance_share(X, person, host, verbose=verbose)
+
+    if verbose:
+        print('  [consensus] step 3/3  rank fusion + device veto')
+
+    common = [c for c in F_train.index if c in F_cross.index]
+    if not common:
+        if verbose:
+            print('    ! no overlap between the two rankings - using training only')
+        cand = list(F_train.sort_values(ascending=False).index[:keep_n])
+        return cand, F_train, mask, pd.DataFrame({'fisher_train': F_train})
+
+    # Percentile ranks, high = good, on the shared feature set.
+    rt = F_train[common].rank(pct=True)
+    rc = F_cross[common].rank(pct=True)
+    fused = (1.0 - w_crossdev) * rt + w_crossdev * rc
+
+    vetoed = dev_sh.reindex(common) > device_veto
+    fused_v = fused.mask(vetoed.fillna(False), other=np.nan)
+
+    # Features the cross-device view could not measure keep their training rank
+    # but are marked, so the ranking CSV can show why they were trusted less.
+    only_train = [c for c in F_train.index if c not in F_cross.index]
+
+    # Keep only features EVERY user can actually measure, matching what
+    # prescreen_v2(per_user=False) does. Without this the wrapper is handed
+    # columns that are dead for some user, and that user's folds silently carry
+    # a constant.
+    ranked = fused_v.dropna().sort_values(ascending=False)
+    shared = [c for c in ranked.index if bool(mask[c].all())]
+    cand = shared[:keep_n]
+    if verbose:
+        print(f'    shared across all users -> {len(shared)} '
+              f'(dropped {len(ranked) - len(shared)} not measurable everywhere)')
+
+    if verbose:
+        n_v = int(vetoed.fillna(False).sum())
+        print(f'    fused {len(common)} feature(s) | vetoed {n_v} as '
+              f'device-driven | {len(only_train)} training-only (unverifiable)')
+        moved = (rc - rt).reindex(cand).dropna()
+        if len(moved):
+            up = moved.sort_values(ascending=False).head(5)
+            dn = moved.sort_values().head(5)
+            print('    biggest RANK GAINS from the cross-device view:')
+            for c, d in up.items():
+                print(f'       +{d:.3f}  {c}')
+            print('    biggest RANK LOSSES (device-flavoured):')
+            for c, d in dn.items():
+                print(f'       {d:+.3f}  {c}')
+        print(f'    -> {len(cand)} candidate(s)')
+
+    diag = pd.DataFrame({
+        'fisher_train': F_train.reindex(F_train.index.union(F_cross.index)),
+        'fisher_crossdev': F_cross.reindex(F_train.index.union(F_cross.index)),
+        'rank_train': rt.reindex(F_train.index.union(F_cross.index)),
+        'rank_crossdev': rc.reindex(F_train.index.union(F_cross.index)),
+        'device_share': dev_sh.reindex(F_train.index.union(F_cross.index)),
+        'person_share': per_sh.reindex(F_train.index.union(F_cross.index)),
+        'fused': fused.reindex(F_train.index.union(F_cross.index)),
+        'vetoed_device': vetoed.reindex(
+            F_train.index.union(F_cross.index)).fillna(False),
+    }).sort_values('fused', ascending=False)
+
+    return cand, fused_v, mask, diag
