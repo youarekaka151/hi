@@ -1,0 +1,723 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{box-sizing:border-box}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>ADAPID Wire Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one long reference sheet, sticky section bar, each side = "today" chart, "with wire v2" chart, then a change ledger. */
+:root{
+  --bg:#F3F5F2; --surface:#FFFFFF; --sunk:#E9EDE8; --ink:#17211B; --muted:#56635B; --line:#D2DAD3;
+  --accent:#0D6B5F; --chg:#A86A12; --chg-bg:#FBEBCB; --new:#2B7A4F; --new-bg:#D5F0E1;
+  --gone:#B0392C; --gone-bg:#F6D7D2; --same:#5D6B63; --same-bg:#E7ECE8;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101513; --surface:#171E1A; --sunk:#1E2722; --ink:#E1E9E3; --muted:#98A79E; --line:#2A3530;
+  --accent:#53C0AE; --chg:#E3A74C; --chg-bg:#3A2C12; --new:#62C690; --new-bg:#15301F;
+  --gone:#E58074; --gone-bg:#3A1A16; --same:#A4B1A9; --same-bg:#232C27; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101513; --surface:#171E1A; --sunk:#1E2722; --ink:#E1E9E3; --muted:#98A79E; --line:#2A3530;
+  --accent:#53C0AE; --chg:#E3A74C; --chg-bg:#3A2C12; --new:#62C690; --new-bg:#15301F;
+  --gone:#E58074; --gone-bg:#3A1A16; --same:#A4B1A9; --same-bg:#232C27; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:8px 64px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(28px,4.4vw,44px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(22px,3vw,30px);font-weight:700;margin-block:0 6px}
+h3{font-size:19px;font-weight:600;margin-block:28px 8px}
+p{margin:0 0 12px;max-width:72ch}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--sunk);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+a{color:var(--accent)}
+.eyebrow{font:600 12px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+header.top{padding-block:28px 18px;display:grid;gap:12px}
+.lede{font-size:17px;color:var(--muted);max-width:78ch}
+nav.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-20px;padding:10px 20px;display:flex;gap:6px;flex-wrap:wrap}
+nav.bar a{font:600 13px/1 var(--display);letter-spacing:.04em;text-decoration:none;color:var(--ink);padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+nav.bar a:hover,nav.bar a:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+section{padding-block:36px 8px;border-bottom:1px solid var(--line);scroll-margin-top:64px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--muted);margin-block:6px 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:22px;height:14px;border-radius:3px;border:1.5px solid;display:inline-block}
+.sw.same{background:#F7F9F7;border-color:#7C8A82}
+.sw.chg{background:#FBE6BD;border-color:#B7791F}
+.sw.new{background:#D3F0DF;border-color:#2F855A}
+.sw.gone{background:#F6D5D1;border-color:#C0392B;border-style:dashed}
+.sw.store{background:#E3EAF1;border-color:#5B6B7A}
+.sw.ext{background:#ECE6F5;border-color:#6B5B95}
+.keyfact{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin-block:18px 4px}
+.keyfact div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.keyfact b{display:block;font:600 14px/1.3 var(--display);letter-spacing:.02em;margin-bottom:4px}
+.keyfact div p{font-size:14px;color:var(--muted);margin:0}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-block:10px 6px;overflow:hidden}
+.chart .cap{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);font:600 13px/1.3 var(--display);letter-spacing:.04em}
+.chart .cap .tag{font:500 12px/1 var(--mono);padding:4px 8px;border-radius:999px}
+.tag.today{background:var(--same-bg);color:var(--same)}
+.tag.v2{background:var(--chg-bg);color:var(--chg)}
+.chart .scroll{overflow-x:auto;padding:14px}
+pre.mermaid{margin:0;background:transparent;font-family:var(--body);min-width:640px;text-align:center}
+.note{font-size:13.5px;color:var(--muted);margin-block:4px 14px;max-width:none}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-block:10px 8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:820px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font:600 12px/1.3 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--sunk);position:sticky;top:0}
+tr:last-child td{border-bottom:0}
+td.k{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+.pill{display:inline-block;font:600 11px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:4px;white-space:nowrap}
+.pill.same{background:var(--same-bg);color:var(--same)}
+.pill.chg{background:var(--chg-bg);color:var(--chg)}
+.pill.new{background:var(--new-bg);color:var(--new)}
+.pill.gone{background:var(--gone-bg);color:var(--gone)}
+.num{font-variant-numeric:tabular-nums}
+.split{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.split>div{min-width:0}
+.codebox{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font:12.5px/1.55 var(--mono);white-space:pre;margin:0}
+.codebox .c{color:var(--muted)}
+.codebox .h{color:var(--accent);font-weight:500}
+.caveat{border-left:3px solid var(--chg);background:var(--chg-bg);color:var(--ink);padding:10px 14px;border-radius:0 8px 8px 0;font-size:14px;margin-block:12px;max-width:none}
+footer{padding-block:28px;color:var(--muted);font-size:13px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">ADAPID behavioural pipeline · SDK → backend → ML</span>
+  <h1>ADAPID Wire Map</h1>
+  <p class="lede">How behavioural data moves today, hop by hop and byte format by byte format, read from the code in <code>SdkTOTP</code> + <code>TestTotpKTK</code>, <code>Archive 1</code> and <code>docker-compose</code>. Each side then gets the same chart redrawn for the columnar protobuf plan (wire v2, see <code>PROTOBUF_COLUMNAR_SDK_BACKEND.md</code> and <code>PROTOBUF_COLUMNAR_ML.md</code>). Every changed box is marked.</p>
+  <div class="legend" aria-label="Chart legend">
+    <span><i class="sw same"></i>unchanged</span>
+    <span><i class="sw chg"></i>changed by wire v2</span>
+    <span><i class="sw new"></i>new with wire v2</span>
+    <span><i class="sw gone"></i>removed in release builds</span>
+    <span><i class="sw store"></i>data at rest</span>
+    <span><i class="sw ext"></i>outside these repos</span>
+  </div>
+</header>
+
+<nav class="bar" aria-label="Sections">
+  <a href="#overview">Overview</a><a href="#sdk">SDK + app</a><a href="#backend">Backend</a><a href="#ml">ML service</a><a href="#formats">Formats per hop</a><a href="#bytes">Inside a v2 body</a><a href="#time">Where time goes</a><a href="#same">Never changes</a>
+</nav>
+
+<!-- ================================================================ OVERVIEW -->
+<section id="overview">
+  <span class="eyebrow">The whole system</span>
+  <h2>Overview: four wire hops, five stores</h2>
+  <p>Hop names are used everywhere on this page. <b>W1</b> phone to backend upload. <b>W2</b> ML pulls training sessions from the backend. <b>W3</b> backend sends one session to ML for a verdict. <b>W4</b> backend calls the external keystroke AI. <b>R1–R5</b> are the at-rest formats: phone checkpoint, Oracle, Redis/Celery, ML staging file, ML job spool and bundles.</p>
+
+  <div class="chart"><div class="cap"><span>System today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart LR
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef ext fill:#ECE6F5,stroke:#6B5B95,color:#231B33
+  subgraph PHONE["PHONE: TestTotpKTK app + dcb4.aar SDK"]
+    cap["Capture in memory&lt;br/&gt;sensors + touches: Gson JsonObjects&lt;br/&gt;keys: KeyEventModel list"]
+    sub["submitData&lt;br/&gt;build one JSON tree"]
+    r1[("R1 crash checkpoint&lt;br/&gt;meta.json + sensors.jsonl")]
+    lf[("pretty JSON copy in filesDir&lt;br/&gt;every build, never deleted")]
+    cap --> sub
+    cap -.-> r1
+    sub -.-> lf
+  end
+  subgraph BE["BACKEND: nginx + gunicorn gevent + Flask  (Archive 1)"]
+    api["POST /api/v4/combined_behaviour_api&lt;br/&gt;get_request_json = decompress + json.loads"]
+    pat["Pattern core&lt;br/&gt;enrolment state machine"]
+    ks["Keystroke core"]
+    ora[("R2 Oracle&lt;br/&gt;NAV_* tables + keystroke tables")]
+    cel[("R3 Redis + Celery&lt;br/&gt;base64 zlib JSON")]
+    fet["GET behavioral/sessions fetch API&lt;br/&gt;_session_dict + jsonify"]
+    api --> pat
+    api --> ks
+    pat --> ora
+    ks --> ora
+    pat -.-> cel
+    ks -.-> cel
+    cel -.-> ora
+    ora --> fet
+  end
+  subgraph ML["ML SERVICE: Flask + trainer process  (docker-compose)"]
+    pred["POST /nav/ai/predict"]
+    trn["POST /nav/ai/train&lt;br/&gt;job spool + trainer"]
+    r4[("R4 stage/sessions.json")]
+    bun[("R5 bundles: joblib OCSVM&lt;br/&gt;+ DTW templates pickle")]
+    trn -.-> r4
+    r4 -.-> bun
+    bun --> pred
+  end
+  kai["External keystroke AI&lt;br/&gt;mbkst-ai"]
+  sub -- "W1  JSON + gzip" --> api
+  pat -- "W3  JSON, zstd only if enabled" --> pred
+  pat -- "train / status  small JSON" --> trn
+  trn -- "W2  GET pages of 10" --> fet
+  fet -- "W2  JSON, uncompressed" --> trn
+  ks -- "W4  JSON" --> kai
+  class r1,lf,ora,cel,r4,bun store
+  class kai ext
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>System with wire v2</span><span class="tag v2">columnar protobuf plan</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart LR
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef ext fill:#ECE6F5,stroke:#6B5B95,color:#231B33
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  classDef new fill:#D3F0DF,stroke:#2F855A,color:#0F3320,stroke-width:2px
+  subgraph PHONE["PHONE: app unchanged, SDK rebuilt"]
+    cap["Capture in memory&lt;br/&gt;S1 unchanged, S2 sensor columns"]
+    sub["submitData&lt;br/&gt;same JSON tree, then ONE v2 encode"]
+    r1[("R1 crash checkpoint&lt;br/&gt;unchanged JSON")]
+    pq[("keydata_pending/SESSION.adpb&lt;br/&gt;deleted after 2xx, resend queue")]
+    cap --> sub
+    cap -.-> r1
+    sub -.-> pq
+  end
+  subgraph BE["BACKEND"]
+    api["combined_behaviour_api&lt;br/&gt;Content-Type dispatch: v2 decode or json.loads&lt;br/&gt;both give the SAME dict"]
+    pat["Pattern core  unchanged"]
+    ks["Keystroke core  unchanged"]
+    ora[("R2 Oracle  unchanged")]
+    cel[("R3 Celery  unchanged")]
+    fet["fetch API&lt;br/&gt;same builders, v2 record stream when asked"]
+    api --> pat
+    api --> ks
+    pat --> ora
+    ks --> ora
+    pat -.-> cel
+    ks -.-> cel
+    cel -.-> ora
+    ora --> fet
+  end
+  subgraph ML["ML SERVICE"]
+    pred["predict: decode encoding, then type&lt;br/&gt;v2 decode gives the SAME dict"]
+    trn["train: NavFetch decodes v2 pages&lt;br/&gt;to the SAME dict"]
+    r4[("R4 sessions.json&lt;br/&gt;byte-identical to today")]
+    bun[("R5 bundles  unchanged")]
+    trn -.-> r4
+    r4 -.-> bun
+    bun --> pred
+  end
+  kai["External keystroke AI"]
+  sub -- "W1  v2 protobuf + gzip&lt;br/&gt;JSON fallback" --> api
+  api -- "X-Adapid-Wire: 2 header" --> sub
+  pat -- "W3  v2 protobuf + zstd" --> pred
+  pat -- "train / status  JSON" --> trn
+  trn -- "W2  Accept v2 stream + gzip" --> fet
+  fet -- "W2  v2 record stream, gzip" --> trn
+  ks -- "W4  JSON unchanged" --> kai
+  class r1,ora,cel,bun store
+  class kai ext
+  class sub,api,fet,pred,trn chg
+  class pq new
+</pre></div></div>
+
+  <div class="keyfact">
+    <div><b>What every receiver sees after decoding</b><p>The exact dict <code>json.loads</code> returns today: same int/float types, same null vs missing vs empty list, same key order. That is why the boxes behind each seam stay grey.</p></div>
+    <div><b>Upload size, median session</b><p class="num">367 KB gzip JSON today, 94 KB for columnar protobuf + gzip (measured on 43 sessions). Largest: 1,317 KB to 296 KB.</p></div>
+    <div><b>What does not move</b><p>Oracle schema, Celery messages, the keystroke-AI call, every response body, the training CSVs and the bundles.</p></div>
+  </div>
+  <p class="caveat">The 94 KB / 296 KB and the 22.4 ms decode figures were measured with touches, keys and metadata as typed rows. The v2 plan carries those parts as a generic interned object, so they must be re-measured in rollout step 1. Sensors are over 90% of the bytes, so a few per cent of drift is the expectation. W2 and W3 sizes in the v2 format were not measured.</p>
+</section>
+
+<!-- ================================================================ SDK -->
+<section id="sdk">
+  <span class="eyebrow">Side 1 · phone</span>
+  <h2>SDK (<code>SdkTOTP</code>, shipped as <code>dcb4.aar</code>) and host app (<code>TestTotpKTK</code>)</h2>
+  <p>All line numbers are <code>Keydata.kt</code> unless another file is named. The host app calls <code>Keydata.submitData</code> from four screens: BehaviorBiometricActivity, PaymentActivity, AddPayeeDetailsActivity and AddNewPayeeAccountActivity. All four only override <code>onSaved</code> and <code>onError</code>.</p>
+
+  <div class="chart"><div class="cap"><span>SDK flow today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef warn fill:#F6D5D1,stroke:#C0392B,color:#4A120C
+  subgraph C1["1  CAPTURE - in memory while the form is open"]
+    a1["SensorManager callback onSensorChanged&lt;br/&gt;SdkClock session time, late / faulty clock flags,&lt;br/&gt;rate decimation, admitSample budgets&lt;br/&gt;SensorDataCollector.kt:519-654"]
+    a2["addSample: ONE Gson JsonObject per sample&lt;br/&gt;sensor_type, t, x, y, z, w, heading_accuracy_rad, n_values,&lt;br/&gt;req_hz, screen, accuracy, values, batched, clock_fallback&lt;br/&gt;appended to sensorSamples JsonArray  :733-765"]
+    b1["Host Activity.dispatchTouchEvent&lt;br/&gt;Keydata.captureTouchEvent"]
+    b2["captureTouch: one ActiveTouch per finger, path JsonArray&lt;br/&gt;on lift: buildTouchRecord JsonObject, about 45 keys + path&lt;br/&gt;cancel: buildCancelledTouchRecord  :783-1079"]
+    c1["CustomKeyboardView central dispatcher&lt;br/&gt;down / up time from MotionEvent"]
+    c0["TextWatcher&lt;br/&gt;system keyboard, paste"]
+    c2["KeyStrokeManager.recordKey&lt;br/&gt;KeyEventModel data class in keyEvents list"]
+    d1["Activity lifecycle&lt;br/&gt;navigation event JsonObjects"]
+    a1 --> a2
+    b1 --> b2
+    c1 --> c2
+    c0 --> c2
+  end
+  ck[("R1  checkpoint on a background thread&lt;br/&gt;filesDir/keydata_session/meta.json + sensors.jsonl&lt;br/&gt;JSON, journal fsynced before meta rename")]
+  C1 -.-> ck
+  h["Host: swipe or Proceed&lt;br/&gt;submitForm on the UI thread"] --> sd["submitData(username, ip, callback)  :1582"]
+  sd --> g{"keys or touches present?&lt;br/&gt;any accelerometer or gyroscope sample?  :1602-1618"}
+  g -->|no| e1["callback.onError - nothing sent"]
+  g -->|yes| bp["buildPayload: ONE JsonObject tree  :1513-1578&lt;br/&gt;root: username, profile_type, ip_address, activity,&lt;br/&gt;behaviour_data.keystroke, sessions list of one&lt;br/&gt;session: ids, label, schema_version 3, timestamps, resume info,&lt;br/&gt;contract fields, coord_frame, screens, fields, device_info, sampling,&lt;br/&gt;navigation_events, orientation_events, touch_events sanitized,&lt;br/&gt;key_events, sensor_samples sanitized FLAT LIST"]
+  bp --> dbg["debug builds only: whole payload to logcat  :1624"]
+  bp --> f1["saveDataLocally: PRETTY JSON written on the UI thread&lt;br/&gt;filesDir/keydata_SESSION_TS.json  :1629, :1838&lt;br/&gt;every build, never deleted  DELETE_FILE_AFTER_UPLOAD=false :694"]
+  f1 --> cb["callback.onSaved(path, PRETTY JSON string)  :1634&lt;br/&gt;hosts ignore the string, call endSession, navigate away"]
+  cb --> cj["compactGson.toJson: compact JSON String  :1642&lt;br/&gt;JsonNull members dropped, Float written via toString"]
+  cj --> ex["networkExecutor thread: sendToApi  :1734"]
+  ex --> dj["debug builds only: files/payloads copy of the wire JSON"]
+  ex --> gz["compressBestEffort: gzip, then decompress and compare  :1715"]
+  gz --> po["HttpURLConnection POST  :1791&lt;br/&gt;URL https://ds246.cf.adapid.link/api/v4/combined_behaviour_api&lt;br/&gt;Content-Type: application/json; charset=utf-8&lt;br/&gt;Content-Encoding: gzip   Accept: application/json&lt;br/&gt;connect 30 s, read 60 s"]
+  po --> rc{"HTTP status"}
+  rc -->|415| pl["retry once uncompressed  :1757"]
+  rc -->|"any other"| ar["onApiResponse(code, body)  :1780&lt;br/&gt;default no-op, no host overrides it"]
+  pl --> ar
+  po -.->|"IOException"| af["onApiFailure - session is lost&lt;br/&gt;no resend of failed uploads"]
+  class ck,f1 store
+  class af warn
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>SDK flow with wire v2 (stage S1)</span><span class="tag v2">columnar protobuf plan</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  classDef new fill:#D3F0DF,stroke:#2F855A,color:#0F3320,stroke-width:2px
+  classDef gone fill:#F6D5D1,stroke:#C0392B,color:#4A120C,stroke-dasharray:5 4
+  cap["1  CAPTURE - unchanged in S1&lt;br/&gt;same clock, budgets, decimation, touch and key logic"]
+  ck[("R1 checkpoint - unchanged JSON")]
+  cap -.-> ck
+  h["Host submit - no host code change"] --> sd["submitData on the UI thread"]
+  sd --> g{"preflight checks - unchanged"}
+  g -->|no| e1["onError"]
+  g -->|yes| bp["buildPayload - unchanged, same JsonObject tree"]
+  bp --> rel{"release build?"}
+  rel -->|yes| x1["no pretty file, no pretty string on the UI thread&lt;br/&gt;onSaved(pending path, empty string)"]
+  rel -->|debug| x2["debug: logcat dump, pretty string and JSON copies kept"]
+  x1 --> neg
+  x2 --> neg
+  neg{"wireV2Allowed?&lt;br/&gt;X-Adapid-Wire: 2 seen within 7 days&lt;br/&gt;and no kill switch"}
+  neg -->|yes| enc["WireV2Encoder.encodeUpload(tree)&lt;br/&gt;Upload message: string table + root Obj&lt;br/&gt;sensor_samples replaced by a sensor_ref&lt;br/&gt;SensorBlock FLAT_LIST: per-stream float32 columns,&lt;br/&gt;delta-encoded t, screen index, derived values, row order"]
+  neg -->|"no: first upload after install,&lt;br/&gt;or backend not advertising"| js["compactGson.toJson - as today"]
+  enc --> ex["networkExecutor thread"]
+  js --> ex
+  ex --> pf[("write body to filesDir/keydata_pending/SESSION.adpb")]
+  pf --> gz["compressBestEffort gzip - unchanged"]
+  gz --> po["POST same URL&lt;br/&gt;Content-Type: application/x-adapid-wire-v2+protobuf&lt;br/&gt;or application/json on the JSON path&lt;br/&gt;Content-Encoding: gzip   Accept: application/json"]
+  po --> hd["read X-Adapid-Wire on EVERY response&lt;br/&gt;2 = keep v2 allowed,  0 = stop v2 for 24 h"]
+  hd --> rc{"HTTP status"}
+  rc -->|2xx| dl["delete the pending file"]
+  rc -->|"400 404 413 415 422&lt;br/&gt;on a v2 body"| fb["clear the v2 flag, build JSON from the kept tree,&lt;br/&gt;retry once as gzip JSON"]
+  rc -->|"429, 5xx, network error"| q["keep the pending file&lt;br/&gt;resend queue on next start and after each success&lt;br/&gt;duplicate session_id is skipped by the backend"]
+  rc -->|"other 4xx after fallback"| d2["delete, log the reason"]
+  dl --> ar["onApiResponse - still a no-op in hosts"]
+  class ck store
+  class pf new
+  class x1,neg,enc,po,hd,fb chg
+  class q new
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>Optional stage S2: sensor memory becomes columnar</span><span class="tag v2">after S1 is in production</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart LR
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  s1["onSensorChanged&lt;br/&gt;clock, decimation, budgets unchanged"] --> s2["SensorColumnStore.append&lt;br/&gt;LongArray t, FloatArray x y z w heading + presence bits,&lt;br/&gt;IntArray n_values req_hz accuracy, screen ids, values, flags&lt;br/&gt;replaces the sensorSamples JsonArray"]
+  s2 --> s3["sanitizeInPlace: same rules as sanitizeSensorSamples&lt;br/&gt;screen fix, values / n_values rebuild, null purge"]
+  s3 --> s4["WireV2Encoder fast path&lt;br/&gt;SensorBlock written straight from the arrays"]
+  s2 --> s5[("checkpoint journal: JSON lines built&lt;br/&gt;only for rows added since the last save")]
+  class s2,s3,s4 chg
+  class s5 store
+</pre></div></div>
+  <p class="note">The code comment at <code>SensorDataCollector.kt:273-277</code> puts a Gson sample at about 1.4 KB of heap. A columnar row is about 40 B, so a 40,000-sample session drops from roughly 56 MB to roughly 2 MB. These are estimates from the code comment, not a device measurement. <code>MAX_SENSOR_SAMPLES</code> stays at 40,000 so the training data does not change shape.</p>
+
+  <h3>SDK + host change ledger</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Step</th><th>Today (where)</th><th>With wire v2</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Sensor capture</td><td>One Gson <code>JsonObject</code> per sample in a <code>JsonArray</code> (<code>SensorDataCollector.kt:733-765</code>)</td><td>S1: same. S2: primitive column arrays; budgets, clock and decimation untouched</td><td><span class="pill same">S1 same</span> <span class="pill chg">S2 changed</span></td></tr>
+      <tr><td>Touch, key, navigation capture</td><td>Touch <code>JsonObject</code> + path array; <code>KeyEventModel</code> list; navigation <code>JsonObject</code></td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Crash checkpoint (R1)</td><td><code>meta.json</code> + <code>sensors.jsonl</code> (<code>SessionCheckpoint.kt</code>)</td><td>Same format; S2 builds journal lines from columns</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Preflight checks</td><td>No keys/touches, or no accelerometer/gyroscope sample → <code>onError</code> (<code>:1602-1618</code>)</td><td>Same rules</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Payload tree</td><td><code>buildPayload</code> (<code>:1513-1578</code>), sanitizers</td><td>Same tree; it is the encoder's input</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Local copy</td><td>Pretty JSON file on the UI thread, every build, never deleted (<code>:1629</code>, <code>:1838</code>, <code>:694</code>)</td><td>Release: gone. Wire bytes written to <code>keydata_pending/</code> on the network thread, deleted after 2xx. Debug: copies kept</td><td><span class="pill gone">removed (release)</span> <span class="pill new">new queue</span></td></tr>
+      <tr><td><code>onSaved</code> payload string</td><td>Pretty JSON of the full payload on the UI thread (<code>:1634</code>); no host reads it</td><td>Release: empty string; debug: as today. Public API behaviour change for any other embedder</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Wire body</td><td><code>compactGson.toJson</code> (<code>:1642</code>)</td><td><code>WireV2Encoder.encodeUpload</code> when v2 is allowed, JSON otherwise</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Compression</td><td>gzip with round-trip check (<code>:1715</code>)</td><td>Same, applied over protobuf</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Request headers</td><td><code>Content-Type: application/json; charset=utf-8</code>, <code>Content-Encoding: gzip</code>, <code>Accept: application/json</code> (<code>:1800-1803</code>)</td><td><code>Content-Type: application/x-adapid-wire-v2+protobuf</code> on the v2 path; the rest same</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Fallback</td><td>415 only → plain JSON (<code>:1757</code>). An old backend answers a protobuf body with 400, which would not trigger it</td><td>400/404/413/415/422 on a v2 body → JSON retry once + flag cleared</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Negotiation</td><td>None</td><td>Reads <code>X-Adapid-Wire</code> on every response; v2 only after seeing <code>2</code> within 7 days</td><td><span class="pill new">new</span></td></tr>
+      <tr><td>Failed uploads</td><td>Lost (<code>onApiFailure</code>, no resend)</td><td>Pending file kept for 429 / 5xx / network errors and re-sent</td><td><span class="pill new">new</span></td></tr>
+      <tr><td>Response handling</td><td>Body passed to <code>onApiResponse</code>, a no-op in all four hosts</td><td>Same for hosts; SDK additionally reads one header</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>SDK build</td><td>Gson, Retrofit, OkHttp; no protobuf; no <code>consumerProguardFiles</code></td><td>Protobuf Gradle plugin, <code>protobuf-javalite</code>, consumer rules; release AAR tested once (today's <code>dcb4.aar</code> is the debug build)</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Host build</td><td><code>implementation files('../libs/dcb4.aar')</code></td><td>Plus <code>protobuf-javalite</code> (a local AAR brings no dependencies); copy the rebuilt AAR. No Kotlin change</td><td><span class="pill chg">changed</span></td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- ================================================================ BACKEND -->
+<section id="backend">
+  <span class="eyebrow">Side 2 · server</span>
+  <h2>Backend (<code>Archive 1</code>)</h2>
+  <p>One request runs the pattern and keystroke halves in parallel and answers only when both finish. The backend also serves training pages to ML (W2) and sends one session to ML for scoring (W3).</p>
+
+  <div class="chart"><div class="cap"><span>W1 receive: one upload, today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  in["HTTPS from the phone&lt;br/&gt;edge in front of ds246.cf.adapid.link"] --> ng["nginx  default.conf: client_max_body_size 50m,&lt;br/&gt;proxy_read_timeout 120s&lt;br/&gt;nginx.conf: gzip on but no gzip_types, so only text/html"]
+  ng --> gu["gunicorn gevent workers - Flask app"]
+  gu --> rt["POST /api/v4/combined_behaviour_api&lt;br/&gt;CombinedMobileApi.post  behaviour_api.py:86"]
+  rt --> rb["read_request_bytes  request_decompress.py:112-129&lt;br/&gt;undo Content-Encoding gzip / br / zstd / deflate,&lt;br/&gt;or sniff gzip / zstd magic bytes; 200 MB cap gives 413"]
+  rb --> jl["json.loads  :132-138&lt;br/&gt;400 Invalid JSON, 400 Invalid compressed payload,&lt;br/&gt;415 unknown Content-Encoding"]
+  jl --> fv["required: username, activity, behaviour_data, sessions&lt;br/&gt;session_id and android_id taken from the first session&lt;br/&gt;missing: 400 Incorrect Payload  :91-113"]
+  fv --> gd["Redis per-user guard acquire_user&lt;br/&gt;busy or too fast: 429 + Retry-After"]
+  gd --> db["get_oracle_connection: a NEW connection per request"]
+  db --> uid["keystroke_user_table lookup by sha3(username)&lt;br/&gt;user_id = stored uuid, or a new uuid4"]
+  uid --> tp["ThreadPoolExecutor(2)  :185"]
+  tp --> pt["Pattern thread&lt;br/&gt;process_request (chart below)"]
+  tp --> lc["gevent Pool: location lookup from client IP&lt;br/&gt;X-Real-IP, X-Forwarded-For, body ip, socket"]
+  lc --> kt["Keystroke thread&lt;br/&gt;process_request (chart below)"]
+  pt --> jn{"either side returned an error?"}
+  kt --> jn
+  jn -->|yes| ud["undo what the other side stored&lt;br/&gt;400 or 500"]
+  jn -->|no| cr["combined risk if pattern gave risk_score&lt;br/&gt;update_final_score in Oracle"]
+  cr --> cd["commit_deferred: queue Celery inserts if any"]
+  cd --> rs["jsonify pattern + keystroke&lt;br/&gt;201 stored or scored, else 200&lt;br/&gt;application/json"]
+</pre></div></div>
+
+  <div class="split">
+  <div class="chart"><div class="cap"><span>Pattern half, today</span><span class="tag today">unchanged by v2</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  p0["assign_owner: operator_id = user_id"] --> p1["validate_nav_payload  store_...:227-279&lt;br/&gt;max sessions, session_type, sensor types,&lt;br/&gt;accelerometer / gyroscope present, number types"]
+  p1 --> p2["nav_get_or_create_profile"]
+  p2 --> p3{"status ready AND ASYNC_AUTHN_STORE=true?&lt;br/&gt;env example default: false"}
+  p3 -->|yes| a1["existing ids + Redis claim_session"]
+  a1 --> a2["payload_from_request_session&lt;br/&gt;same builders as the fetch API"]
+  a2 --> a3["call_predict_api  = W3"]
+  a3 --> a4["deferred store: packed_sessions =&lt;br/&gt;base64(zlib(JSON))  authn_store.pack"]
+  a4 --> a5[("R3 Celery task, queue pattern_store&lt;br/&gt;or inline if Redis is down")]
+  a5 --> a6[("Oracle NAV_* + NAV_SESSION_SCORES")]
+  p3 -->|no| s1["ensure_mobile_device&lt;br/&gt;DEVICE_DETAILS as JSON text"]
+  s1 --> s2[("store_nav_sessions  :282&lt;br/&gt;NAV_SESSIONS with COORD_FRAME, FIELDS_JSON,&lt;br/&gt;SCREENS_JSON as JSON text; child tables by&lt;br/&gt;executemany; NAV_TOUCH_EVENTS one execute per touch;&lt;br/&gt;NAV_SENSOR_SAMPLES.VALUES_JSON text")]
+  s2 --> s3{"enrolment state"}
+  s3 -->|"under 50 sessions"| s4["store only: phase n"]
+  s3 -->|"reaches 50"| s5["claim + call_train_api&lt;br/&gt;POST AI_NAV_URL/train  JSON"]
+  s3 -->|pending| s6["get_train_status&lt;br/&gt;GET AI_NAV_URL/train/USER"]
+  s3 -->|ready| s7["_score_session: W3 predict&lt;br/&gt;NAV_SESSION_SCORES.DETAILS_JSON"]
+  class a5,a6,s2 store
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>Keystroke half, today</span><span class="tag today">unchanged by v2</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef ext fill:#ECE6F5,stroke:#6B5B95,color:#231B33
+  k1["phase count; new user: insert&lt;br/&gt;keystroke_user_table row"] --> k2["AES-encrypt behaviour_data JSON&lt;br/&gt;get_encrypted_data"]
+  k2 --> k3["W4  POST AI_MBK_URL/mbkst-ai/.../core/transform-data/&lt;br/&gt;JSON list of key, keydown_time, keyup_time as ints&lt;br/&gt;timeout 60 s  mobile_core_api.py:116-152"]
+  k3 --> k4["check_profile_exists_adaptive_encrypt"]
+  k4 -->|"insufficient data"| k5[("store encrypted raw row, phase n")]
+  k4 -->|"enough to build a profile"| k6["W4  create-identity-profile/&lt;br/&gt;then store the profile"]
+  k4 -->|"profile exists"| k7["W4  user-authentication call  :418&lt;br/&gt;risk_score, spatial, temporal"]
+  k7 --> k8[("store through Celery, queue keystroke_store,&lt;br/&gt;or deferred until the whole request succeeds")]
+  class k5,k8 store
+  class k3,k6,k7 ext
+</pre></div></div>
+  </div>
+
+  <div class="chart"><div class="cap"><span>W2 serve and W3 send, today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  subgraph W2["W2: ML pulls training pages"]
+    m["ML: GET NAV_API_BASE_URL/behavioral/sessions/USER&lt;br/&gt;include_events=1, limit=10, offset=N&lt;br/&gt;X-API-Key, Accept: application/json"] --> e["edge: public path /api/v4/behavioral/sessions&lt;br/&gt;backend route /nav/back/api/v1/behavioral/sessions/USER&lt;br/&gt;the rewrite is not in this code"]
+    e --> au["_authorised: X-API-Key"]
+    au --> f[("fetch_user_sessions: profile + one page of NAV_SESSIONS&lt;br/&gt;_load_children: chunked child-table queries")]
+    f --> sdict["_session_dict per session  :229-299&lt;br/&gt;id, session_label, created_at, root device fields,&lt;br/&gt;fields / screens from JSON text, ui_states empty,&lt;br/&gt;sensor_samples DICT BY SENSOR TYPE,&lt;br/&gt;or legacy sensor_events empty list"]
+    sdict --> jf["jsonify success, message, data&lt;br/&gt;Flask sorts keys"]
+    jf --> out["application/json, not compressed&lt;br/&gt;about 2.9 MB of JSON per session"]
+  end
+  subgraph W3["W3: score one session"]
+    w1["payload_from_request_session(session)  :319-368&lt;br/&gt;request session rebuilt with the SAME builders&lt;br/&gt;so predict sees the training shape"] --> w2["_predict_body  pattern_api_services.py:115-122&lt;br/&gt;json.dumps; zstd only if ML_PREDICT_ZSTD=true"]
+    w2 --> w3["POST AI_NAV_URL/predict&lt;br/&gt;application/json"]
+    w3 --> w4["JSON verdict: is_genuine, risk_score&lt;br/&gt;validated, saved as DETAILS_JSON"]
+  end
+  class f store
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>Backend with wire v2: the three seams</span><span class="tag v2">columnar protobuf plan</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  classDef new fill:#D3F0DF,stroke:#2F855A,color:#0F3320,stroke-width:2px
+  subgraph U["W1 receive"]
+    u1["nginx limits and gunicorn - unchanged"] --> u2["read_request_bytes - unchanged&lt;br/&gt;decompression and 200 MB cap"]
+    u2 --> u3{"get_request_body: Content-Type&lt;br/&gt;checked AFTER decompression"}
+    u3 -->|"application/x-adapid-wire-v2+protobuf"| u4["adapid_wire.codec.decode_upload&lt;br/&gt;returns exactly the dict json.loads gives today&lt;br/&gt;bad body: 400 Invalid protobuf"]
+    u3 -->|"anything else"| u5["json.loads - as today"]
+    u4 --> u6["from the field checks onward: unchanged&lt;br/&gt;guard, Oracle, pattern half, keystroke half,&lt;br/&gt;W4, Celery, combined risk, rollback"]
+    u5 --> u6
+    u6 --> u7["same JSON response body&lt;br/&gt;NEW header X-Adapid-Wire: 2 on every response"]
+  end
+  subgraph F["W2 serve"]
+    f1["_authorised, paging, _load_children,&lt;br/&gt;_session_dict - unchanged"] --> f2{"Accept contains&lt;br/&gt;application/x-adapid-wire-v2-stream+protobuf?"}
+    f2 -->|no| f3["jsonify - as today"]
+    f2 -->|yes| f4["codec.iter_page_records, sort_keys like jsonify&lt;br/&gt;Header record, one StoredSession per session,&lt;br/&gt;Trailer with n_sessions; varint length prefixes&lt;br/&gt;Vary: Accept"]
+    f3 --> f5["nginx gzip_types: application/json&lt;br/&gt;and the v2 stream type"]
+    f4 --> f5
+  end
+  subgraph P["W3 send"]
+    p1["payload_from_request_session - unchanged"] --> p2{"ML_PREDICT_WIRE"}
+    p2 -->|json| p3["json.dumps - as today"]
+    p2 -->|v2| p4["codec.encode_stored_session&lt;br/&gt;Content-Type application/x-adapid-wire-v2+protobuf"]
+    p3 --> p5["zstd layer when ML_PREDICT_ZSTD=true&lt;br/&gt;recommended on now, independent of v2"]
+    p4 --> p5
+    p5 --> p6["POST AI_NAV_URL/predict&lt;br/&gt;JSON verdict - unchanged"]
+  end
+  class u3,u4,u7,f2,f4,f5,p2,p4,p5 chg
+</pre></div></div>
+
+  <h3>Backend change ledger</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Step</th><th>Today (where)</th><th>With wire v2</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nginx compression</td><td><code>gzip on</code> without <code>gzip_types</code> (<code>nginx.conf:24</code>): JSON goes out uncompressed</td><td><code>gzip_types application/json application/x-adapid-wire-v2-stream+protobuf; gzip_proxied any;</code></td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Body decompression</td><td><code>read_request_bytes</code> (<code>request_decompress.py:112-129</code>)</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Body parse</td><td><code>get_request_json</code> → <code>json.loads</code> (<code>:132-138</code>), called at <code>behaviour_api.py:92</code></td><td><code>get_request_body</code>: v2 type → <code>decode_upload</code>, anything else → <code>json.loads</code>. Other endpoints keep <code>get_request_json</code></td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Field checks, guard, user lookup, threads</td><td><code>behaviour_api.py:91-228</code></td><td>Same; they receive the same dict</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Pattern half</td><td>Validation, ingest maps, enrolment state machine, predict call</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Keystroke half + W4</td><td>AES-encrypted storage; three JSON calls to the keystroke AI</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Celery (R3)</td><td><code>base64(zlib(JSON))</code> in task kwargs</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Response</td><td><code>jsonify({"pattern","keystroke"})</code></td><td>Same body; new header <code>X-Adapid-Wire: 2</code> on every response (blueprint <code>after_request</code>), <code>0</code> when <code>ADVERTISE_WIRE=0</code></td><td><span class="pill new">new header</span></td></tr>
+      <tr><td>Training fetch (W2)</td><td><code>jsonify</code> in <code>MobilePatternFetchSessionsApi.get</code> (<code>:426-456</code>)</td><td>When <code>Accept</code> asks for the stream type: Header / StoredSession / Trailer records, keys sorted like <code>jsonify</code>, <code>Vary: Accept</code>. Otherwise unchanged</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Fetch builders</td><td><code>_session_dict</code>, <code>_touch_event</code>, <code>_key_event</code>, … and <code>payload_from_request_session</code></td><td>Same, so predict and training keep the same shape</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Predict send (W3)</td><td><code>json.dumps</code>, zstd only if <code>ML_PREDICT_ZSTD=true</code> (default false)</td><td><code>ML_PREDICT_WIRE=v2</code> → protobuf body; zstd stays a separate switch</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Train trigger / status</td><td>Small JSON to <code>/nav/ai/train</code> and <code>/nav/ai/train/USER</code></td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Dependencies</td><td>No protobuf</td><td>Pinned <code>protobuf</code> + an identical <code>adapid_wire/</code> package (checksummed)</td><td><span class="pill new">new</span></td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- ================================================================ ML -->
+<section id="ml">
+  <span class="eyebrow">Side 3 · models</span>
+  <h2>ML service (<code>docker-compose</code>)</h2>
+  <p>Two paths carry behavioural data: the trainer pulls a user's sessions and builds a bundle, and the predict endpoint scores one session. Only the first function on each path changes.</p>
+
+  <div class="chart"><div class="cap"><span>Training path, today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  t0["Backend: POST /nav/ai/train&lt;br/&gt;JSON user_id, profile_id, attempt"] --> t1[("train_jobs.enqueue: job file in the spool&lt;br/&gt;JSON, tmp file + os.replace")]
+  t1 --> t2["trainer process  supervisord: nice python3 train_jobs.py&lt;br/&gt;claims the job, calls enrol(user_id)"]
+  t2 --> t3["NavFetch: GET pages of 10  = W2&lt;br/&gt;urllib, timeout 300 s, 6 attempts, jittered backoff&lt;br/&gt;Accept: application/json, no Accept-Encoding"]
+  t3 --> t4["_get: resp.read then json.loads(body)&lt;br/&gt;retry on OSError, HTTPException, ValueError"]
+  t4 --> t5["sessions(): success + data checks, profile present,&lt;br/&gt;same user, profile not changed, session_id present,&lt;br/&gt;page guard, all sessions collected"]
+  t5 --> t6{"per session&lt;br/&gt;is_eligible?  is_unreadable?"}
+  t6 -->|"not eligible"| sk1["skip"]
+  t6 -->|"no samples and sensor_events present"| sk2["count n_unreadable, skip"]
+  t6 -->|keep| t7["EnvelopeWriter.add: json.dumps(session)"]
+  t7 --> st[("R4  stage/sessions.json&lt;br/&gt;sessions array first, tail written at close")]
+  st --> b4["step 4  DTW templates&lt;br/&gt;reads sessions.json: read_user_file, json.load"]
+  st --> b5["step 5  features, SessionPipelineV2&lt;br/&gt;reads sessions.json again: train / test CSV"]
+  st --> b6["step 6  census&lt;br/&gt;behavior_cleaner SessionStream, streaming parse"]
+  b4 --> b7["steps 7 - 11  OCSVM train + gates, holdout,&lt;br/&gt;assemble, validate with the serving loader"]
+  b5 --> b7
+  b6 --> b7
+  b7 --> b12[("step 12  publish: USER_ocsvm.joblib +&lt;br/&gt;USER_dtw_templates.pkl  saved_models_v8 / templates_v8")]
+  b12 --> b13["step 13  delete the stage directory"]
+  q["Backend: GET /nav/ai/train/USER"] --> q2["job status JSON"]
+  class t1,st,b12 store
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>Training path with wire v2</span><span class="tag v2">columnar protobuf plan</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef store fill:#E3EAF1,stroke:#5B6B7A,color:#1B2530
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  t0["train trigger, job spool, trainer - unchanged"] --> t3["NavFetch GET pages of 10&lt;br/&gt;NAV_FETCH_WIRE=v2: Accept v2 stream, application/json q=0.5&lt;br/&gt;Accept-Encoding: gzip"]
+  t3 --> ce{"response Content-Encoding gzip?"}
+  ce -->|yes| gu["gzip.decompress"]
+  ce -->|no| ct
+  gu --> ct{"response Content-Type"}
+  ct -->|"v2 stream"| dp["codec.decode_page&lt;br/&gt;Header, StoredSession records, Trailer count check&lt;br/&gt;DecodeError / WireError / missing trailer: retry like a&lt;br/&gt;truncated JSON page"]
+  ct -->|"application/json"| jl["json.loads - as today"]
+  dp --> same["the SAME response dict as today&lt;br/&gt;keys sorted, ints stay ints, empty lists kept"]
+  jl --> same
+  same --> t5["sessions() guards - unchanged"]
+  t5 --> t6{"is_eligible / is_unreadable - unchanged&lt;br/&gt;sensor_events empty list still arrives"}
+  t6 --> t7["EnvelopeWriter.add json.dumps - unchanged"]
+  t7 --> st[("R4 sessions.json - byte-identical to a JSON fetch")]
+  st --> b4["steps 4 - 13 - unchanged&lt;br/&gt;same CSVs, same census, same bundle"]
+  class t3,ce,gu,ct,dp chg
+  class st store
+</pre></div></div>
+
+  <div class="split">
+  <div class="chart"><div class="cap"><span>Predict path, today</span><span class="tag today">current code</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  r0["Backend: POST /nav/ai/predict&lt;br/&gt;application/json, zstd if enabled"] --> r1["nginx client_max_body_size 100M&lt;br/&gt;gunicorn gevent, Flask"]
+  r1 --> r2{"_extract_payload  :18-38&lt;br/&gt;Content-Encoding zstd?"}
+  r2 -->|yes| r3["zstd decompress, json.loads"]
+  r2 -->|no| r4["request.get_json silent"]
+  r3 --> r5{"got a dict?"}
+  r4 --> r5
+  r5 -->|None| r6["readable JSON 400"]
+  r5 -->|yes| r7["prediction_service: _unwrap,&lt;br/&gt;bundle from joblib, cached"]
+  r7 --> r8["extract_session: deepcopy,&lt;br/&gt;normalize_upload_shape, cleaner, sanitizer,&lt;br/&gt;SessionFeatureExtractorV2&lt;br/&gt;1.5 - 2.1 s in app.log"]
+  r8 --> r9["quality gate, OCSVM + DTW score&lt;br/&gt;14 - 22 ms"]
+  r9 --> r10["calculate_risk_score&lt;br/&gt;JSON response"]
+</pre></div></div>
+
+  <div class="chart"><div class="cap"><span>Predict path with wire v2</span><span class="tag v2">columnar protobuf plan</span></div><div class="scroll">
+<pre class="mermaid">
+flowchart TD
+  classDef default fill:#F7F9F7,stroke:#7C8A82,color:#17211B
+  classDef chg fill:#FBE6BD,stroke:#B7791F,color:#3D2A05,stroke-width:2px
+  r0["Backend: POST /nav/ai/predict&lt;br/&gt;v2 protobuf or JSON, zstd optional"] --> r1["nginx, gunicorn, Flask - unchanged"]
+  r1 --> e1{"STEP 1 Content-Encoding"}
+  e1 -->|zstd| e2["zstd decompress with a size cap"]
+  e1 -->|"none / identity"| t1
+  e1 -->|other| bad["return None: readable JSON 400"]
+  e2 --> t1{"STEP 2 Content-Type"}
+  t1 -->|"application/x-adapid-wire-v2+protobuf"| d2["codec.decode_stored_session&lt;br/&gt;the same dict json.loads gives"]
+  t1 -->|"application/json"| d1["json.loads - as today"]
+  d2 --> ok["_unwrap, extract_session, score,&lt;br/&gt;risk, JSON response - all unchanged"]
+  d1 --> ok
+  class e1,e2,t1,d2 chg
+</pre></div></div>
+  </div>
+  <p class="note">The order matters. Undo the compression first, then look at the type. Checking the type first would reject every zstd-compressed protobuf body with a 400.</p>
+
+  <h3>ML change ledger</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Step</th><th>Today (where)</th><th>With wire v2</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Train trigger, job spool, trainer</td><td><code>/nav/ai/train</code>, <code>train_jobs.py</code>, JSON job files</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>W2 request</td><td><code>Accept: application/json</code>, no compression (<code>enrollment_service.py</code> <code>NavFetch._get</code>)</td><td><code>NAV_FETCH_WIRE=v2</code>: Accept the stream type with JSON as q=0.5; <code>Accept-Encoding: gzip</code></td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>W2 parse</td><td><code>json.loads(body)</code></td><td>Dispatch on the response type: <code>decode_page</code> or <code>json.loads</code>; protobuf errors join the retry list; trailer count checked</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Page guards</td><td><code>NavFetch.sessions()</code></td><td>Same; same dict in</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Eligibility filters</td><td><code>is_eligible</code> (<code>:241</code>), <code>is_unreadable</code> (<code>:262-274</code>)</td><td>Same; the empty <code>sensor_events</code> list survives v2</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Staging file (R4)</td><td><code>EnvelopeWriter</code> → <code>sessions.json</code></td><td>Same writer; file byte-identical to a JSON fetch</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Build steps 4–13</td><td>DTW, features, census, train, publish</td><td>Same; the vendored pipeline needs no edits</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Predict parse</td><td><code>_extract_payload</code> (<code>mobile_navigation_predict.py:18-38</code>)</td><td>Encoding first, then type; v2 → <code>decode_stored_session</code>; still returns <code>None</code> on failure</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td>Scoring pipeline + responses</td><td><code>prediction_service</code>, <code>feature_extraction</code>, JSON responses</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td>Dependencies and boot checks</td><td><code>requirements.txt</code> partly unpinned; no protobuf</td><td>Pin everything incl. <code>protobuf</code>; <code>boot_checks</code>: add <code>protobuf</code> with <code>_IMPORT_NAME['protobuf']='google.protobuf'</code>; log that the upb backend is active</td><td><span class="pill chg">changed</span></td></tr>
+    </tbody></table></div>
+</section>
+
+<!-- ================================================================ FORMATS -->
+<section id="formats">
+  <span class="eyebrow">Byte formats</span>
+  <h2>Every hop and store: today vs wire v2</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>ID</th><th>From → to</th><th>Today: transport and format</th><th>Today: size</th><th>With wire v2</th><th></th></tr></thead>
+    <tbody>
+      <tr><td class="k">W1 req</td><td>SDK → <code>/api/v4/combined_behaviour_api</code></td><td>POST, <code>application/json; charset=utf-8</code>, <code>Content-Encoding: gzip</code>. One JSON object; <code>sessions</code> holds one session; <code>sensor_samples</code> is a flat list</td><td class="num">median 2.32 MB raw, 367 KB gzip; largest 8.18 MB, 1,317 KB</td><td><code>application/x-adapid-wire-v2+protobuf</code> + gzip: <code>Upload</code> message, columnar sensors. JSON fallback</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td class="k">W1 resp</td><td>backend → SDK</td><td>JSON <code>{"pattern":{…},"keystroke":{…}}</code>, 201/200/4xx/5xx</td><td class="num">under 1 KB</td><td>Same body + <code>X-Adapid-Wire</code> header</td><td><span class="pill new">new header</span></td></tr>
+      <tr><td class="k">Train</td><td>backend → <code>/nav/ai/train</code>, <code>/train/USER</code></td><td>Small JSON both ways</td><td class="num">under 1 KB</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">W2 req</td><td>ML → <code>…/behavioral/sessions/USER</code></td><td>GET, <code>X-API-Key</code>, <code>Accept: application/json</code>, no <code>Accept-Encoding</code></td><td class="num">—</td><td><code>Accept</code>: v2 stream, JSON q=0.5; <code>Accept-Encoding: gzip</code></td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td class="k">W2 resp</td><td>backend → ML</td><td><code>application/json</code> from <code>jsonify</code>, sorted keys, uncompressed. Up to 10 stored-shape sessions; <code>sensor_samples</code> is a dict by sensor type</td><td class="num">about 2.9 MB of JSON per session (same builder as W3)</td><td><code>application/x-adapid-wire-v2-stream+protobuf</code>, gzip: Header, StoredSession × n, Trailer</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td class="k">W3 req</td><td>backend → <code>/nav/ai/predict</code></td><td><code>application/json</code>; <code>Content-Encoding: zstd</code> only if <code>ML_PREDICT_ZSTD=true</code> (default false). One stored-shape session</td><td class="num">avg 2.9 MB JSON; 383 KB with zstd</td><td><code>application/x-adapid-wire-v2+protobuf</code> (+ zstd): one <code>StoredSession</code></td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td class="k">W3 resp</td><td>ML → backend</td><td>JSON: <code>is_genuine</code>, <code>risk_score</code>, quality fields</td><td class="num">under 1 KB</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">W4</td><td>backend → keystroke AI</td><td>JSON to <code>transform-data/</code>, <code>create-identity-profile/</code>, the user-authentication call; 60 s timeout</td><td class="num">small</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">R1</td><td>phone, during a form</td><td><code>keydata_session/meta.json</code> + <code>sensors.jsonl</code></td><td class="num">grows with the session</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">R1b</td><td>phone, after submit</td><td>Pretty JSON <code>keydata_SESSION_TS.json</code>, every build, never deleted; debug-only extra copy in <code>files/payloads/</code></td><td class="num">2–8 MB+ each, piles up</td><td>Release: <code>keydata_pending/SESSION.adpb</code>, deleted after 2xx, re-sent on failure. Debug: copies kept</td><td><span class="pill chg">changed</span></td></tr>
+      <tr><td class="k">R2</td><td>Oracle</td><td>Relational NAV_* tables; <code>COORD_FRAME</code>, <code>FIELDS_JSON</code>, <code>SCREENS_JSON</code>, <code>VALUES_JSON</code>, <code>DETAILS_JSON</code>, <code>DEVICE_DETAILS</code> as JSON text; keystroke rows AES-encrypted JSON</td><td class="num">—</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">R3</td><td>Redis + Celery</td><td>JSON task kwargs; pattern sessions as <code>base64(zlib(JSON))</code></td><td class="num">29.4 MB for the 43 sessions</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">R4</td><td>ML stage dir</td><td><code>sessions.json</code>, read by steps 4, 5 and 6, deleted at step 13</td><td class="num">about 2.9 MB per session</td><td>Same file, byte-identical</td><td><span class="pill same">same</span></td></tr>
+      <tr><td class="k">R5</td><td>ML disk</td><td>JSON job spool and selection files; <code>*_ocsvm.joblib</code>, <code>*_dtw_templates.pkl</code>; feature CSVs while building</td><td class="num">—</td><td>Same</td><td><span class="pill same">same</span></td></tr>
+    </tbody></table></div>
+  <p class="note">W1 sizes are measured on the 43 captured payloads. W2/W3 JSON per session = 125.8 MB ÷ 43 sessions, built with the backend's own <code>payload_from_request_session</code>; with zstd, 16.5 MB ÷ 43. The comment at <code>enrollment_service.py:115</code> estimates about 90 MB per 10-session page. W2/W3 sizes in v2 were not measured.</p>
+</section>
+
+<!-- ================================================================ INSIDE V2 -->
+<section id="bytes">
+  <span class="eyebrow">Wire v2 structure</span>
+  <h2>Inside a v2 body</h2>
+  <p>The upload keeps the JSON tree as one interned object and lifts only the sensor list out into columns. Two rows of one accelerometer stream look like this in each format (illustrative values).</p>
+  <div class="split">
+<pre class="codebox"><span class="c">// today: one JSON object per sample, keys repeated every row</span>
+"sensor_samples": [
+  {"sensor_type": "accelerometer", "t": 1790581072772,
+   "x": -1.2017999887466431, "y": 6.218900203704834,
+   "z": 7.710299968719482, "n_values": 3, "req_hz": 100,
+   "screen": "Payment Screen", "accuracy": 3},
+  {"sensor_type": "accelerometer", "t": 1790581072782,
+   "x": -1.100000023841858, "y": 6.300000190734863,
+   "z": 7.599999904632568, "n_values": 3, "req_hz": 100,
+   "screen": "Payment Screen", "accuracy": 3},
+  … about 7,900 rows in a median session
+]</pre>
+<pre class="codebox"><span class="c">// wire v2: one SensorStream per sensor type</span>
+<span class="h">SensorStream</span>  sensor_type = strtab[4]   n = 2
+  t_delta  = [1790581072772, 10]      <span class="c">sint64, packed</span>
+  x.f32    = [-1.2018, -1.1]          <span class="c">4 bytes each, exact</span>
+  y.f32    = [6.2189, 6.3]
+  z.f32    = [7.7103, 7.6]
+  n_values = [3, 3]   req_hz = [100, 100]
+  accuracy = [3, 3]
+  screen_ix = [0, 0]  <span class="c">strtab[0] = "Payment Screen"</span>
+  vkind    = [-1, -1] <span class="c">no values key on these rows</span>
+<span class="h">SensorBlock</span> FLAT_LIST
+  order = [0, 0, …]   <span class="c">rebuilds the original row order</span></pre>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Message</th><th>Used on</th><th>Holds</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Upload</td><td>W1</td><td><code>wire_version</code> 2, string table, the whole payload as one <code>Obj</code>, and one <code>SensorBlock</code> for each <code>sensor_ref</code> placeholder</td></tr>
+      <tr><td class="k">Value / Obj / List</td><td>everywhere</td><td>Exact JSON: null, bool, int (sint64), float (double), string, list, object. Keys point into the string table and keep their order. An empty list stays an empty list</td></tr>
+      <tr><td class="k">SensorBlock</td><td>W1, W2, W3</td><td><code>FLAT_LIST</code> (upload shape, with <code>order</code>) or <code>DICT_BY_TYPE</code> (stored shape)</td></tr>
+      <tr><td class="k">SensorStream</td><td>inside SensorBlock</td><td>Delta-encoded <code>t</code>; float32 columns where every value is float32-exact, otherwise float64; integer columns with absent-row lists; screen index; <code>values</code> derived from x/y/z/w when identical, else stored; <code>batched</code> / <code>clock_fallback</code> as row-index lists; anything unknown in <code>RowExtra</code></td></tr>
+      <tr><td class="k">StoredSession</td><td>W2 record, W3 body</td><td>One stored-shape session: string table, body <code>Obj</code>, <code>SensorBlock</code></td></tr>
+      <tr><td class="k">Header / Trailer</td><td>W2 stream</td><td>Header: the response dict with an empty <code>sessions</code> list. Trailer: <code>n_sessions</code>; a missing or wrong trailer means a truncated page</td></tr>
+    </tbody></table></div>
+  <p class="note">Why float32 is lossless here: the SDK widens every sensor value with <code>.toDouble()</code> before Gson writes it (<code>SensorDataCollector.kt:673-720, 730, 770</code>). All 2,679,280 sensor values in the corpus passed the float32 round-trip check. Touch and path coordinates do not pass it, so they travel as doubles produced exactly the way Gson writes them today (<code>Float.toString()</code>, then parsed as a double).</p>
+</section>
+
+<!-- ================================================================ TIME -->
+<section id="time">
+  <span class="eyebrow">Latency</span>
+  <h2>Where time goes, and what v2 moves</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Stage</th><th>Today</th><th>Source</th><th>With wire v2</th></tr></thead>
+    <tbody>
+      <tr><td>SDK, UI thread at submit</td><td><code>buildPayload</code> plus three full text serializations of a 2–8 MB tree: pretty file, pretty <code>onSaved</code> string, compact wire string</td><td>code; device time not measured</td><td>Release: <code>buildPayload</code> + one v2 encode. The two pretty copies are gone</td></tr>
+      <tr><td>What the user waits for</td><td>Only the UI-thread work. All four screens navigate away in <code>onSaved</code>; nobody waits for the server</td><td>host code</td><td>Same, with less UI-thread work</td></tr>
+      <tr><td>W1 transfer</td><td class="num">367 KB median, 1,317 KB largest (gzip JSON)</td><td>measured</td><td class="num">94 KB median, 296 KB largest (to be re-measured)</td></tr>
+      <tr><td>Backend body parse</td><td class="num">json.loads 31.5 ms median, 118 ms largest</td><td>measured, dev machine, upb</td><td class="num">22.4 ms median, 78 ms largest (to be re-measured)</td></tr>
+      <tr><td>Backend inserts</td><td>New Oracle connection per request; one <code>execute</code> per touch</td><td>code</td><td>Unchanged by v2; separate fix</td></tr>
+      <tr><td>Predict on ML</td><td class="num">1.5–2.1 s total; feature extraction is almost all of it; scoring 14–22 ms</td><td><code>app.log</code></td><td>A few per cent at most: smaller body, faster parse</td></tr>
+      <tr><td>Enrolment</td><td class="num">234–781 s; fetching 53 sessions in 6 pages took about 18 s</td><td><code>app.log</code></td><td>Fetch shrinks (gzip alone helps today); the build steps are unchanged</td></tr>
+    </tbody></table></div>
+  <p class="caveat">Three changes cut latency without any schema work. Add <code>gzip_types</code> in nginx plus <code>Accept-Encoding</code> on the ML fetch. Turn on <code>ML_PREDICT_ZSTD=true</code>. Drop the two pretty serializations from release SDK builds. They are step 0 of the rollout.</p>
+</section>
+
+<!-- ================================================================ UNCHANGED -->
+<section id="same">
+  <span class="eyebrow">Guarantees</span>
+  <h2>What never changes</h2>
+  <div class="keyfact">
+    <div><b>Data in Oracle</b><p>Same tables, columns, JSON text columns and row values. Gate: one session uploaded as JSON and as v2 gives identical rows.</p></div>
+    <div><b>Training data</b><p><code>sessions.json</code> is byte-identical, so the CSVs, census, DTW templates and bundles are identical. Gate: column-for-column CSV diff.</p></div>
+    <div><b>Predict results</b><p>Same dict into <code>extract_session</code>, so the same risk score. Gate: JSON, JSON+zstd, v2 and v2+zstd give identical responses.</p></div>
+    <div><b>Every response body</b><p>App, backend, ML and keystroke-AI responses stay JSON. The SDK only learns to read one extra header.</p></div>
+    <div><b>Keystroke path</b><p><code>behaviour_data.keystroke</code> still reaches the backend unchanged and still goes to the keystroke AI as JSON.</p></div>
+    <div><b>Rollback</b><p>Every step has a switch: <code>NAV_FETCH_WIRE</code>, <code>ML_PREDICT_WIRE</code>, <code>ADVERTISE_WIRE</code>. The JSON paths are never deleted.</p></div>
+  </div>
+</section>
+
+<footer>Built from the code in the three repositories on 15 Oct 2026. File:line references point at those copies; the deployed backend may differ, since the ML calls <code>/api/v4/behavioral/sessions</code> while this backend only registers <code>/nav/back/api/v1/behavioral/sessions</code>.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({startOnLoad: true, theme: dark ? "dark" : "default", flowchart: {htmlLabels: true}});
+</script>
+</body></html>
